@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Cash Out - Auto Scan</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f9fafb; color: #111827; font-size: 14px;
+      padding-bottom: 80px;
+    }
+    .container { max-width: 48rem; margin: 0 auto; padding: 12px; }
+    .header {
+      background: #1e3a5f; color: white; padding: 14px 16px;
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .header .badge {
+      font-size: 10px; background: #2563eb; color: white;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .card {
+      background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 16px; margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 600; color: #374151;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    label {
+      display: block; font-size: 11px; font-weight: 600;
+      color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 3px;
+    }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea {
+      width: 100%; padding: 8px 10px; font-size: 14px;
+      border: 1px solid #d1d5db; border-radius: 6px;
+      background: white; outline: none; transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+    .mb-2 { margin-bottom: 8px; }
+    .mb-3 { margin-bottom: 12px; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .text-sm { font-size: 12px; }
+    .text-xs { font-size: 11px; }
+    .text-right { text-align: right; }
+    .font-bold { font-weight: 700; }
+    .text-red-600 { color: #dc2626; }
+    .text-green-600 { color: #16a34a; }
+    .text-gray-500 { color: #6b7280; }
+    .text-gray-700 { color: #374151; }
+    .text-blue-600 { color: #2563eb; }
+
+    button {
+      cursor: pointer; font-size: 14px; font-weight: 500;
+      padding: 10px 20px; border-radius: 8px; border: none;
+      transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+    .btn-outline { background: white; color: #374151; border: 1px solid #d1d5db; }
+    .btn-outline:hover:not(:disabled) { background: #f9fafb; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-green { background: #16a34a; color: white; }
+    .btn-green:hover:not(:disabled) { background: #15803d; }
+
+    .scan-area {
+      border: 2px dashed #93c5fd; background: #eff6ff; border-radius: 10px;
+      padding: 20px; text-align: center; cursor: pointer; transition: all 0.15s;
+    }
+    .scan-area:hover { background: #dbeafe; border-color: #60a5fa; }
+    .scan-area.has-photos { border-color: #16a34a; background: #f0fdf4; }
+
+    .progress-bar {
+      height: 6px; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin: 10px 0;
+    }
+    .progress-fill {
+      height: 100%; background: #2563eb; border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
+    .photo-grid {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+    }
+    .photo-thumb {
+      width: 56px; height: 56px; border-radius: 6px; overflow: hidden;
+      border: 2px solid #e5e7eb; position: relative;
+    }
+    .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .photo-thumb.done { border-color: #16a34a; }
+    .photo-thumb.error { border-color: #dc2626; }
+    .photo-thumb.processing { border-color: #f59e0b; }
+    .photo-thumb .status-icon {
+      position: absolute; top: -4px; right: -4px; width: 16px; height: 16px;
+      border-radius: 999px; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: white;
+    }
+    .photo-thumb.done .status-icon { background: #16a34a; }
+    .photo-thumb.error .status-icon { background: #dc2626; }
+    .photo-thumb.processing .status-icon { background: #f59e0b; }
+
+    .status-msg {
+      padding: 10px 14px; border-radius: 8px; margin-top: 10px; font-size: 13px;
+    }
+    .status-msg.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .status-msg.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .status-msg.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .status-msg.warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+
+    .section-header {
+      font-size: 13px; font-weight: 600; color: #374151;
+      background: #f3f4f6; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px;
+    }
+
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollable number inputs */
+    input[type="number"] { -moz-appearance: textfield; }
+    input[type="number"]::-webkit-inner-spin-button { opacity: 1; height: 24px; }
+
+    /* Hide file input */
+    #photoInput { display: none; }
+
+    .summary-row {
+      display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px;
+    }
+
+    @media (max-width: 480px) {
+      .grid-4 { grid-template-columns: 1fr 1fr; }
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>St. Louis</h1>
+  <span class="badge">Auto-Scan</span>
+  <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+    <button class="btn-sm" style="background:rgba(255,255,255,0.15);color:white;padding:4px 10px" onclick="toggleApiKey()">Key</button>
+    <a href="https://cashout-2444e.web.app/" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none">Original</a>
+  </div>
+</div>
+
+<div class="container" id="app">
+  <!-- API Key Section -->
+  <div id="apiKeySection" class="card" style="display:none">
+    <div class="card-title">Gemini API Key</div>
+    <div style="display:flex;gap:8px">
+      <input type="password" id="apiKeyInput" placeholder="Enter your Gemini API key..." style="flex:1" />
+      <button class="btn-primary btn-sm" onclick="saveApiKey()">Save</button>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">Used for scanning receipts. Stored in this browser only.</p>
+  </div>
+
+  <!-- Scan Section -->
+  <div class="card">
+    <div class="card-title">Scan POS Report</div>
+    <p class="text-xs text-gray-500 mb-3">Take photos of your POS report. All photos are auto-processed — no need to tap "Confirm & Next" each time.</p>
+
+    <div class="scan-area" id="scanArea" onclick="document.getElementById('photoInput').click()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="2.5"/></svg>
+      <p style="font-size:14px;font-weight:600;color:#2563eb;margin-top:6px">Scan POS Report</p>
+      <p class="text-xs text-gray-500">(batch scan multiple sheets — just keep taking photos)</p>
+    </div>
+
+    <input type="file" id="photoInput" accept="image/*" capture="environment" multiple onchange="handlePhotos(event)" />
+
+    <!-- Photo thumbnails -->
+    <div class="photo-grid" id="photoGrid"></div>
+
+    <!-- Progress -->
+    <div id="progressArea" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <p class="text-xs text-gray-500 text-right" id="progressLabel">0 / 0</p>
+    </div>
+
+    <!-- Status -->
+    <div id="statusArea"></div>
+
+    <!-- Scan & Actions -->
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn-primary" id="scanBtn" onclick="startAutoScan()" disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/></svg>
+        Scan All Photos
+      </button>
+      <button class="btn-outline" onclick="clearPhotos()">Clear Photos</button>
+    </div>
+  </div>
+
+  <!-- Staff & Date -->
+  <div class="card">
+    <div class="grid-2">
+      <div>
+        <label>Staff Name</label>
+        <select id="staffName" onchange="onStaffChange()">
+          <option value="">Select your name...</option>
+        </select>
+      </div>
+      <div>
+        <label>Date</label>
+        <input type="date" id="reportDate" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales & Tip Out -->
+  <div class="card">
+    <div class="card-title">Sales &amp; Tip Out</div>
+    <div class="grid-3 mb-3">
+      <div><label>Food Sales</label><input type="number" id="foodSales" step="0.01" oninput="calc()" /></div>
+      <div><label>Liquor Sales</label><input type="number" id="liquorSales" step="0.01" oninput="calc()" /></div>
+      <div><label>Total Sales (before tax)</label><input type="number" id="totalSalesBeforeTax" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="grid-3 mb-3">
+      <div><label>Total Sales</label><input type="number" id="totalSales" step="0.01" oninput="calc()" /></div>
+      <div><label>Tip Rate Used (%)</label><input type="number" id="tipRateUsed" step="0.01" value="0" oninput="calc()" /></div>
+      <div><label>Kitchen Tip Out</label><input type="number" id="kitchenTipOut" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="summary-row"><span class="text-gray-700">Total Tip Out:</span><span class="font-bold" id="totalTipOut">$0.00</span></div>
+    <div><label>Actual Kitchen Tip Out</label><input type="number" id="actualKitchenTipOut" step="0.01" /></div>
+  </div>
+
+  <!-- Tenders / Payments -->
+  <div class="card">
+    <div class="card-title">Payments / Tenders</div>
+    <div class="grid-3 mb-3">
+      <div><label>AMEX</label><input type="number" id="amex" step="0.01" oninput="calc()" /></div>
+      <div><label>Mastercard</label><input type="number" id="mastercard" step="0.01" oninput="calc()" /></div>
+      <div><label>Visa</label><input type="number" id="visa" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="grid-3 mb-3">
+      <div><label>Debit</label><input type="number" id="debit" step="0.01" oninput="calc()" /></div>
+      <div><label>RND Adjst</label><input type="number" id="rndAdjst" step="0.01" oninput="calc()" /></div>
+      <div><label>Gift Cards</label><input type="number" id="giftCards" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="grid-3 mb-3">
+      <div><label>SkipTheDishes</label><input type="number" id="skipDish" step="0.01" oninput="calc()" /></div>
+      <div><label>Uber Eats</label><input type="number" id="uber" step="0.01" oninput="calc()" /></div>
+      <div><label>DoorDash</label><input type="number" id="doordash" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="grid-3 mb-3">
+      <div><label>Paid Outs</label><input type="number" id="paidOuts" step="0.01" oninput="calc()" /></div>
+      <div></div><div></div>
+    </div>
+
+    <div class="section-header mt-3">Offline Payments</div>
+    <div class="grid-4 mb-3">
+      <div><label>Offline Visa</label><input type="number" id="offVisa" step="0.01" oninput="calc()" /></div>
+      <div><label>Offline Debit</label><input type="number" id="offDebit" step="0.01" oninput="calc()" /></div>
+      <div><label>Offline MC</label><input type="number" id="offMastercard" step="0.01" oninput="calc()" /></div>
+      <div><label>Offline Amex</label><input type="number" id="offAmex" step="0.01" oninput="calc()" /></div>
+    </div>
+
+    <div class="section-header">Online / Other Payments</div>
+    <div class="grid-4">
+      <div><label>Online Visa</label><input type="number" id="oVisa" step="0.01" oninput="calc()" /></div>
+      <div><label>Online Debit</label><input type="number" id="oDebit" step="0.01" oninput="calc()" /></div>
+      <div><label>Online MC</label><input type="number" id="oMastercard" step="0.01" oninput="calc()" /></div>
+      <div><label>Online Amex</label><input type="number" id="oAmex" step="0.01" oninput="calc()" /></div>
+    </div>
+
+    <div class="summary-row mt-3"><span class="font-bold">Credit Total:</span><span class="font-bold" id="creditTotal">$0.00</span></div>
+  </div>
+
+  <!-- Server Calculations -->
+  <div class="card">
+    <div class="card-title">Server Calculations</div>
+    <div class="grid-2">
+      <div><label>Cash Payments</label><input type="number" id="cashPayments" step="0.01" oninput="calc()" /></div>
+      <div><label>Non-Cash Tips</label><input type="number" id="nonCashTips" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="grid-2 mt-3">
+      <div><label>Auto Gratuity</label><input type="number" id="autoGratuity" step="0.01" oninput="calc()" /></div>
+      <div><label>Server Tip Charges</label><input type="number" id="serverTipCharges" step="0.01" oninput="calc()" /></div>
+    </div>
+    <div class="grid-2 mt-3">
+      <div><label>Carry Forward</label><input type="number" id="carryForward" step="0.01" value="0" oninput="calc()" /></div>
+      <div></div>
+    </div>
+  </div>
+
+  <!-- Final Summary -->
+  <div class="card">
+    <div class="card-title">Final Summary</div>
+    <div class="summary-row"><span>Server Net Cash Owing:</span><span class="font-bold" id="netCashOwing">$0.00</span></div>
+    <div class="summary-row"><span>Total Tip Out:</span><span class="font-bold text-red-600" id="totalTipOut2">$0.00</span></div>
+    <div class="summary-row" style="border-top:1px solid #e5e7eb;padding-top:10px;margin-top:6px">
+      <span class="font-bold" style="font-size:16px">Final Amount Owed:</span>
+      <span class="font-bold" style="font-size:18px" id="finalAmountOwed">$0.00</span>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
+    <button class="btn-outline" onclick="resetForm()">Reset</button>
+    <button class="btn-danger" id="submitBtn" onclick="submitSheet()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      Submit Cash Out Sheet
+    </button>
+  </div>
+
+  <!-- Hidden recent sheets -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">Recent Submissions</div>
+    <div id="recentSheets"><p class="text-xs text-gray-500">Loading...</p></div>
+  </div>
+</div>
+
+<script>
+// ===== FIREBASE SETUP =====
+const firebaseConfig = {
+  apiKey: "AIzaSyCbmdSE10dBnf_JmnBTubPLYx-qR46oyqNftyQ",
+  authDomain: "cashout-2444e.firebaseapp.com",
+  projectId: "cashout-2444e",
+  storageBucket: "cashout-2444e.firebasestorage.app",
+  messagingSenderId: "77580678753",
+  appId: "1:77580678753:web:56c309767142bd2e875c20",
+  measurementId: "G-KQ4ZSPX2RR"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ===== STATE =====
+let photos = [];           // array of {dataUrl, status: 'pending'|'processing'|'done'|'error'}
+let isScanning = false;
+let apiKey = localStorage.getItem('gemini_api_key') || '';
+let editingId = null;      // ID of sheet being edited
+let recentSheets = [];
+
+// ===== DOM REFS =====
+const $ = id => document.getElementById(id);
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+  // Set today's date
+  const today = new Date().toISOString().split('T')[0];
+  $('reportDate').value = today;
+  
+  // Load API key
+  if (apiKey) $('apiKeyInput').value = apiKey;
+  
+  // Load staff list
+  loadStaff();
+  
+  // Load recent sheets
+  loadRecentSheets();
+  
+  // Check scan button state
+  updateScanBtn();
+});
+
+// ===== API KEY =====
+function toggleApiKey() {
+  const s = $('apiKeySection');
+  s.style.display = s.style.display === 'none' ? 'block' : 'none';
+}
+function saveApiKey() {
+  apiKey = $('apiKeyInput').value.trim();
+  localStorage.setItem('gemini_api_key', apiKey);
+  $('apiKeySection').style.display = 'none';
+  updateScanBtn();
+}
+
+// ===== STAFF LOADING =====
+function loadStaff() {
+  db.collection('servers').orderBy('name').get().then(snap => {
+    const sel = $('staffName');
+    sel.innerHTML = '<option value="">Select your name...</option>';
+    snap.forEach(doc => {
+      const d = doc.data();
+      const opt = document.createElement('option');
+      opt.value = doc.id;
+      opt.textContent = d.name || 'Unknown';
+      sel.appendChild(opt);
+    });
+  }).catch(e => console.error('Staff load error:', e));
+}
+
+// ===== RECENT SHEETS =====
+function loadRecentSheets() {
+  const stored = localStorage.getItem('recentCashOutSheets');
+  if (stored) {
+    try {
+      recentSheets = JSON.parse(stored);
+      renderRecentSheets();
+    } catch(e) {}
+  }
+  // Also fetch latest from Firestore
+  db.collection('cashOutReports').orderBy('timestamp', 'desc').limit(5).get().then(snap => {
+    recentSheets = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      recentSheets.push({id: doc.id, name: d.name, date: d.date});
+    });
+    localStorage.setItem('recentCashOutSheets', JSON.stringify(recentSheets));
+    renderRecentSheets();
+  }).catch(e => {});
+}
+
+function renderRecentSheets() {
+  const el = $('recentSheets');
+  if (recentSheets.length === 0) {
+    el.innerHTML = '<p class="text-xs text-gray-500">No recent submissions.</p>';
+    return;
+  }
+  el.innerHTML = recentSheets.map(s => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
+      <span class="text-sm">${s.name} - ${s.date}</span>
+      <button class="btn-outline btn-sm" onclick="loadSheet('${s.id}')">Edit</button>
+    </div>
+  `).join('');
+}
+
+function loadSheet(id) {
+  db.collection('cashOutReports').doc(id).get().then(doc => {
+    if (!doc.exists) return;
+    const d = doc.data();
+    editingId = id;
+    // Set staff & date
+    const sel = $('staffName');
+    for (let opt of sel.options) {
+      if (opt.textContent === d.name) { sel.value = opt.value; break; }
+    }
+    if (d.date) $('reportDate').value = d.date;
+    
+    // Set all fields
+    setVal('foodSales', d.foodSales);
+    setVal('liquorSales', d.liquorSales);
+    setVal('totalSalesBeforeTax', d.totalSalesBeforeTax);
+    setVal('totalSales', d.totalSales);
+    setVal('tipRateUsed', d.tipRateUsed);
+    setVal('kitchenTipOut', d.kitchenTipOut);
+    setVal('actualKitchenTipOut', d.actualKitchenTipOut);
+    
+    if (d.tenders) {
+      setVal('amex', d.tenders.amex);
+      setVal('mastercard', d.tenders.mastercard);
+      setVal('visa', d.tenders.visa);
+      setVal('debit', d.tenders.debit);
+      setVal('rndAdjst', d.tenders.rndAdjst);
+      setVal('giftCards', d.tenders.giftCards);
+      setVal('paidOuts', d.tenders.paidOuts);
+      setVal('skipDish', d.tenders.skipDish);
+      setVal('uber', d.tenders.uber);
+      setVal('doordash', d.tenders.doordash);
+      setVal('offVisa', d.tenders.offVisa);
+      setVal('offDebit', d.tenders.offDebit);
+      setVal('offMastercard', d.tenders.offMastercard);
+      setVal('offAmex', d.tenders.offAmex);
+      setVal('oVisa', d.tenders.oVisa);
+      setVal('oDebit', d.tenders.oDebit);
+      setVal('oMastercard', d.tenders.oMastercard);
+      setVal('oAmex', d.tenders.oAmex);
+    }
+    if (d.serverCalculations) {
+      setVal('cashPayments', d.serverCalculations.cashPayments);
+      setVal('nonCashTips', d.serverCalculations.nonCashTips);
+      setVal('autoGratuity', d.serverCalculations.autoGratuity);
+      setVal('serverTipCharges', d.serverCalculations.serverTipCharges);
+      setVal('carryForward', d.serverCalculations.carryForward);
+    }
+    calc();
+    setStatus('info', 'Loaded sheet for editing. Submit to update.');
+    $('submitBtn').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Update Cash Out Sheet';
+  }).catch(e => console.error(e));
+}
+
+function setVal(id, val) {
+  const el = $(id);
+  if (el && val !== undefined && val !== null) el.value = Number(val) || 0;
+}
+
+// ===== PHOTO HANDLING =====
+function handlePhotos(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+  
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      photos.push({ dataUrl: e.target.result, status: 'pending' });
+      renderPhotos();
+      updateScanBtn();
+      $('scanArea').classList.add('has-photos');
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value = '';
+}
+
+function renderPhotos() {
+  const grid = $('photoGrid');
+  grid.innerHTML = photos.map((p, i) => {
+    let cls = 'photo-thumb';
+    let icon = '';
+    if (p.status === 'done') { cls += ' done'; icon = '&#10003;'; }
+    else if (p.status === 'error') { cls += ' error'; icon = '&#10007;'; }
+    else if (p.status === 'processing') { cls += ' processing'; icon = '...'; }
+    return `<div class="${cls}">
+      <img src="${p.dataUrl}" alt="Photo ${i+1}" />
+      <div class="status-icon">${icon}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearPhotos() {
+  photos = [];
+  renderPhotos();
+  $('scanArea').classList.remove('has-photos');
+  $('progressArea').style.display = 'none';
+  $('statusArea').innerHTML = '';
+  updateScanBtn();
+}
+
+function updateScanBtn() {
+  $('scanBtn').disabled = photos.length === 0 || !apiKey || isScanning;
+}
+
+function setStatus(type, msg) {
+  $('statusArea').innerHTML = `<div class="status-msg ${type}">${msg}</div>`;
+}
+
+// ===== AUTO SCAN =====
+async function startAutoScan() {
+  if (photos.length === 0 || !apiKey) return;
+  if (isScanning) return;
+  
+  isScanning = true;
+  $('scanBtn').disabled = true;
+  
+  // Reset all photo statuses
+  photos.forEach(p => { if (p.status !== 'done') p.status = 'pending'; });
+  renderPhotos();
+  
+  // Show progress
+  $('progressArea').style.display = 'block';
+  updateProgress(0);
+  
+  setStatus('info', `Starting auto-scan of ${photos.length} photos...`);
+  
+  const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  
+  const PROMPT = `You are a POS receipt parser. Extract the following numbers from this restaurant POS report image. Return ONLY valid JSON (no markdown, no code fences) with these exact keys — all values as numbers (use 0 if not found):
+
+{
+  "foodSales": 0,
+  "totalSalesBeforeTax": 0,
+  "totalSales": 0,
+  "amex": 0,
+  "mastercard": 0,
+  "visa": 0,
+  "debit": 0,
+  "giftCards": 0,
+  "rndAdjst": 0,
+  "skipDish": 0,
+  "uber": 0,
+  "doordash": 0,
+  "offVisa": 0,
+  "offDebit": 0,
+  "offMastercard": 0,
+  "offAmex": 0,
+  "oVisa": 0,
+  "oDebit": 0,
+  "oMastercard": 0,
+  "oAmex": 0,
+  "cashPayments": 0,
+  "nonCashTips": 0,
+  "autoGratuity": 0,
+  "serverTipCharges": 0,
+  "paidOuts": 0
+}
+
+Field mappings (look for these labels on the report):
+- foodSales = Food Sales, Food, Net Food
+- totalSalesBeforeTax = Subtotal, Sales Before Tax
+- totalSales = Total Sales, Grand Total, Net Sales
+- amex = AMEX, American Express
+- mastercard = MC, Mastercard, Master Card
+- visa = VISA
+- debit = DEBIT, Debit Card
+- giftCards = Gift Card, Givex, Giftcard
+- rndAdjst = Round Adjustment, Rnd Adjst
+- skipDish = SkipTheDishes, SkipDish, Skip
+- uber = Uber Eats, Uber
+- doordash = DoorDash, Dash
+- offVisa = Offline Visa, Off Visa, Phone Visa
+- offDebit = Offline Debit, Off Debit, Phone Debit
+- offMastercard = Offline MC, Off Mastercard, Phone MC
+- offAmex = Offline Amex, Off Amex, Phone Amex
+- oVisa = Online Visa, O Visa
+- oDebit = Online Debit, O Debit
+- oMastercard = Online MC, O Mastercard
+- oAmex = Online Amex, O Amex
+- cashPayments = Cash, Cash Payments
+- nonCashTips = Non-Cash Tips, Credit Card Tips
+- autoGratuity = Auto Grat, Auto Gratuity
+- serverTipCharges = Tip Charges, Server Tips
+- paidOuts = Paid Out, Paid Outs
+
+IMPORTANT: Return ONLY the JSON object, nothing else.`;
+
+  let successCount = 0;
+  let errorCount = 0;
+  
+  for (let i = 0; i < photos.length; i++) {
+    if (photos[i].status === 'done') {
+      successCount++;
+      updateProgress(successCount + errorCount);
+      continue;
+    }
+    
+    photos[i].status = 'processing';
+    renderPhotos();
+    setStatus('info', `Scanning photo ${i+1}/${photos.length}...`);
+    updateProgress(successCount + errorCount);
+    
+    try {
+      const base64Data = photos[i].dataUrl.split(',')[1];
+      
+      const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: PROMPT },
+              { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
+            ]
+          }]
+        })
+      });
+      
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini error ${response.status}: ${errText.slice(0, 100)}`);
+      }
+      
+      const result = await response.json();
+      const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      
+      if (!jsonMatch) throw new Error('Could not parse JSON from response');
+      
+      const data = JSON.parse(jsonMatch[0]);
+      
+      // Apply data to form fields
+      applyScanData(data);
+      
+      photos[i].status = 'done';
+      successCount++;
+      setStatus('success', `Photo ${i+1}/${photos.length} scanned.`);
+      
+    } catch (err) {
+      photos[i].status = 'error';
+      errorCount++;
+      setStatus('error', `Photo ${i+1} failed: ${err.message.slice(0, 80)}`);
+    }
+    
+    renderPhotos();
+    updateProgress(successCount + errorCount);
+    
+    // Brief delay between photos to avoid rate limiting
+    if (i < photos.length - 1) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+  
+  // Done
+  isScanning = false;
+  updateScanBtn();
+  
+  if (errorCount === 0) {
+    setStatus('success', `All ${photos.length} photos scanned successfully! Review the fields below and submit.`);
+  } else {
+    setStatus('warn', `${successCount} of ${photos.length} photos scanned. ${errorCount} failed — you can retry them or fill in manually.`);
+  }
+}
+
+function applyScanData(data) {
+  const mapping = {
+    foodSales: 'foodSales',
+    totalSalesBeforeTax: 'totalSalesBeforeTax',
+    totalSales: 'totalSales',
+    amex: 'amex',
+    mastercard: 'mastercard',
+    visa: 'visa',
+    debit: 'debit',
+    giftCards: 'giftCards',
+    rndAdjst: 'rndAdjst',
+    skipDish: 'skipDish',
+    uber: 'uber',
+    doordash: 'doordash',
+    offVisa: 'offVisa',
+    offDebit: 'offDebit',
+    offMastercard: 'offMastercard',
+    offAmex: 'offAmex',
+    oVisa: 'oVisa',
+    oDebit: 'oDebit',
+    oMastercard: 'oMastercard',
+    oAmex: 'oAmex',
+    cashPayments: 'cashPayments',
+    nonCashTips: 'nonCashTips',
+    autoGratuity: 'autoGratuity',
+    serverTipCharges: 'serverTipCharges',
+    paidOuts: 'paidOuts'
+  };
+  
+  for (const [key, fieldId] of Object.entries(mapping)) {
+    if (data[key] !== undefined && data[key] !== null && data[key] !== 0) {
+      const el = $(fieldId);
+      if (el) el.value = Number(data[key]) || 0;
+    }
+  }
+  
+  calc();
+}
+
+function updateProgress(completed) {
+  const total = photos.length;
+  const pct = total > 0 ? (completed / total) * 100 : 0;
+  $('progressFill').style.width = `${pct}%`;
+  $('progressLabel').textContent = `${completed} / ${total}`;
+}
+
+// ===== CALCULATIONS =====
+function calc() {
+  const get = id => Number($(id)?.value) || 0;
+  
+  // Credit total (sum of all tenders)
+  const tenders = [
+    'amex','mastercard','visa','debit','rndAdjst','giftCards','paidOuts',
+    'skipDish','uber','doordash',
+    'offVisa','offDebit','offMastercard','offAmex',
+    'oVisa','oDebit','oMastercard','oAmex'
+  ];
+  const creditTotal = tenders.reduce((sum, id) => sum + get(id), 0);
+  $('creditTotal').textContent = `$${creditTotal.toFixed(2)}`;
+  
+  // Server calculations
+  const cashPayments = get('cashPayments');
+  const nonCashTips = get('nonCashTips');
+  const autoGratuity = get('autoGratuity');
+  const serverTipCharges = get('serverTipCharges');
+  const carryForward = get('carryForward');
+  
+  const netCashOwing = cashPayments - nonCashTips - autoGratuity - serverTipCharges + carryForward;
+  $('netCashOwing').textContent = `$${netCashOwing.toFixed(2)}`;
+  $('netCashOwing').style.color = netCashOwing > 0 ? '#dc2626' : '#16a34a';
+  
+  // Tip out
+  const totalSales = get('totalSales');
+  const tipRate = get('tipRateUsed');
+  const kitchenTipOut = get('kitchenTipOut');
+  const totalTipOut = kitchenTipOut > 0 ? kitchenTipOut : (totalSales * tipRate / 100);
+  $('totalTipOut').textContent = `$${totalTipOut.toFixed(2)}`;
+  $('totalTipOut2').textContent = `$${totalTipOut.toFixed(2)}`;
+  
+  // Final amount owed
+  const finalAmount = netCashOwing + totalTipOut;
+  const faEl = $('finalAmountOwed');
+  faEl.textContent = `$${finalAmount.toFixed(2)}`;
+  faEl.style.color = finalAmount > 0 ? '#dc2626' : '#16a34a';
+}
+
+// ===== STAFF CHANGE =====
+function onStaffChange() {
+  // Could load existing sheet for this staff+date combo
+  const name = $('staffName').selectedOptions[0]?.textContent || '';
+  const date = $('reportDate').value;
+  if (name && name !== 'Select your name...' && date) {
+    // Check for existing
+    db.collection('cashOutReports')
+      .where('name', '==', name)
+      .where('date', '==', date)
+      .limit(1)
+      .get()
+      .then(snap => {
+        if (!snap.empty) {
+          const doc = snap.docs[0];
+          setStatus('info', `Existing sheet found for ${name} on ${date}. <a href="#" onclick="loadSheet('${doc.id}');return false" style="color:#2563eb">Click to load</a>`);
+        }
+      })
+      .catch(() => {});
+  }
+}
+
+// ===== SUBMIT =====
+async function submitSheet() {
+  const name = $('staffName').selectedOptions[0]?.textContent || '';
+  const date = $('reportDate').value;
+  
+  if (!name || name === 'Select your name...' || !date) {
+    setStatus('error', 'Please select your name and provide a date.');
+    return;
+  }
+  
+  const get = id => Number($(id)?.value) || 0;
+  
+  const btn = $('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting...';
+  
+  // Calculate values
+  const totalSales = get('totalSales');
+  const tipRate = get('tipRateUsed');
+  const kitchenTipOut = get('kitchenTipOut');
+  const totalTipOut = kitchenTipOut > 0 ? kitchenTipOut : (totalSales * tipRate / 100);
+  
+  const cashPayments = get('cashPayments');
+  const nonCashTips = get('nonCashTips');
+  const autoGratuity = get('autoGratuity');
+  const serverTipCharges = get('serverTipCharges');
+  const carryForward = get('carryForward');
+  const netCashOwing = cashPayments - nonCashTips - autoGratuity - serverTipCharges + carryForward;
+  
+  const tenders = {
+    amex: get('amex'), mastercard: get('mastercard'), visa: get('visa'),
+    debit: get('debit'), rndAdjst: get('rndAdjst'), giftCards: get('giftCards'),
+    paidOuts: get('paidOuts'), skipDish: get('skipDish'), uber: get('uber'),
+    doordash: get('doordash'),
+    offVisa: get('offVisa'), offDebit: get('offDebit'),
+    offMastercard: get('offMastercard'), offAmex: get('offAmex'),
+    oVisa: get('oVisa'), oDebit: get('oDebit'),
+    oMastercard: get('oMastercard'), oAmex: get('oAmex')
+  };
+  
+  const creditTotal = Object.values(tenders).reduce((s, v) => s + v, 0);
+  
+  const sheetData = {
+    name,
+    date,
+    totalSales: get('totalSales'),
+    foodSales: get('foodSales'),
+    totalSalesBeforeTax: get('totalSalesBeforeTax'),
+    liquorSales: get('liquorSales'),
+    tipRateUsed: tipRate,
+    kitchenTipOut,
+    totalTipOut,
+    actualKitchenTipOut: get('actualKitchenTipOut'),
+    serverCalculations: {
+      cashPayments,
+      nonCashTips,
+      autoGratuity,
+      serverTipCharges,
+      carryForward,
+      netCashOwing
+    },
+    tenders,
+    creditTotal,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  
+  try {
+    if (editingId) {
+      await db.collection('cashOutReports').doc(editingId).update(sheetData);
+      setStatus('success', 'Cash out sheet updated successfully!');
+    } else {
+      sheetData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+      const docRef = await db.collection('cashOutReports').add(sheetData);
+      
+      // Save to recent
+      const entry = { id: docRef.id, name, date };
+      recentSheets = [entry, ...recentSheets.filter(s => s.id !== docRef.id)].slice(0, 5);
+      localStorage.setItem('recentCashOutSheets', JSON.stringify(recentSheets));
+      renderRecentSheets();
+      
+      setStatus('success', 'Cash out sheet submitted successfully!');
+    }
+    
+    editingId = null;
+    $('submitBtn').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Submit Cash Out Sheet';
+    
+  } catch (err) {
+    setStatus('error', `Submit failed: ${err.message}`);
+  }
+  
+  btn.disabled = false;
+}
+
+function resetForm() {
+  // Clear all inputs
+  document.querySelectorAll('input[type="number"]').forEach(el => el.value = '');
+  document.querySelectorAll('input[type="text"]').forEach(el => el.value = '');
+  $('staffName').value = '';
+  $('reportDate').value = new Date().toISOString().split('T')[0];
+  $('tipRateUsed').value = '0';
+  $('carryForward').value = '0';
+  editingId = null;
+  $('submitBtn').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Submit Cash Out Sheet';
+  $('statusArea').innerHTML = '';
+  clearPhotos();
+  calc();
+}
+</script>
+</body>
+</html>
