@@ -156,15 +156,19 @@
   <h1>St. Louis</h1>
   <span class="badge">Auto-Scan</span>
   <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-    <button class="btn-sm" style="background:rgba(255,255,255,0.15);color:white;padding:4px 10px" onclick="toggleApiKey()">Key</button>
+    <button class="btn-sm" style="background:rgba(255,255,255,0.15);color:white;padding:4px 10px" onclick="document.getElementById('apiKeyInput').focus()">Set Key</button>
     <a href="https://cashout-2444e.web.app/" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none">Original</a>
   </div>
 </div>
 
 <div class="container" id="app">
   <!-- API Key Section -->
-  <div id="apiKeySection" class="card" style="display:none">
-    <div class="card-title">Gemini API Key</div>
+  <div id="apiKeySection" class="card">
+    <div class="card-title">Gemini API Key <span id="keyStatus" style="font-weight:normal;text-transform:none;color:#16a34a;font-size:12px"></span></div>
+    <div id="noKeyMsg" class="status-msg warn" style="margin-top:0;margin-bottom:8px">
+      <strong>No API key set.</strong> You need a Gemini API key to scan receipts. 
+      <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#2563eb">Get one free here</a>.
+    </div>
     <div style="display:flex;gap:8px">
       <input type="password" id="apiKeyInput" placeholder="Enter your Gemini API key..." style="flex:1" />
       <button class="btn-primary btn-sm" onclick="saveApiKey()">Save</button>
@@ -357,7 +361,12 @@ document.addEventListener('DOMContentLoaded', () => {
   $('reportDate').value = today;
   
   // Load API key
-  if (apiKey) $('apiKeyInput').value = apiKey;
+  if (apiKey) {
+    $('apiKeyInput').value = apiKey;
+    $('noKeyMsg').style.display = 'none';
+    $('keyStatus').textContent = 'Saved';
+    $('apiKeyInput').type = 'text';
+  }
   
   // Load staff list
   loadStaff();
@@ -370,14 +379,19 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== API KEY =====
-function toggleApiKey() {
-  const s = $('apiKeySection');
-  s.style.display = s.style.display === 'none' ? 'block' : 'none';
-}
+// Key section is always visible now
 function saveApiKey() {
   apiKey = $('apiKeyInput').value.trim();
   localStorage.setItem('gemini_api_key', apiKey);
-  $('apiKeySection').style.display = 'none';
+  if (apiKey) {
+    $('noKeyMsg').style.display = 'none';
+    $('keyStatus').textContent = 'Saved';
+    $('apiKeyInput').type = 'text';
+  } else {
+    $('noKeyMsg').style.display = 'block';
+    $('keyStatus').textContent = '';
+    $('apiKeyInput').type = 'password';
+  }
   updateScanBtn();
 }
 
@@ -533,7 +547,20 @@ function clearPhotos() {
 }
 
 function updateScanBtn() {
-  $('scanBtn').disabled = photos.length === 0 || !apiKey || isScanning;
+  const btn = $('scanBtn');
+  if (photos.length === 0) {
+    btn.disabled = true;
+    btn.title = 'Take photos first';
+  } else if (!apiKey) {
+    btn.disabled = true;
+    btn.title = 'Set your Gemini API key above first';
+  } else if (isScanning) {
+    btn.disabled = true;
+    btn.title = 'Scanning in progress...';
+  } else {
+    btn.disabled = false;
+    btn.title = '';
+  }
 }
 
 function setStatus(type, msg) {
